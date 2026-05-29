@@ -1,0 +1,18 @@
+{
+  "functions": {
+    "api/latest.ts": { "maxDuration": 10 },
+    "api/historical.ts": { "maxDuration": 10 },
+    "api/backfill.ts": { "maxDuration": 30 }
+  },
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" }
+      ]
+    }
+  ]
+}
