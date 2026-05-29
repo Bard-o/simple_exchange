@@ -1,6 +1,28 @@
+# Dependencies
 node_modules
+
+# Build output
 dist
+
+# Environment (local overrides, never committed)
 .env.local
 .env.*.local
+
+# Vercel
 .vercel
+
+# TypeScript build info
 *.tsbuildinfo
+
+# Test coverage
+coverage
+
+# Editor
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
