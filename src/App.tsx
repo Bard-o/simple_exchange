@@ -1,16 +1,22 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useCurrencyStore } from "@/hooks/useCurrencyStore";
 import { useExchangeRates } from "@/hooks/useExchangeRates";
-import { convertViaUSD } from "@/utils/conversion";
-import { formatCurrency } from "@/utils/formatters";
+import { recalculateInputs } from "@/utils/conversion";
+import { formatCurrency, parseAmount } from "@/utils/formatters";
 import { EmptyState } from "@/components/EmptyState";
 import { CurrencySelector } from "@/components/CurrencySelector";
 import { CurrencyInput } from "@/components/CurrencyInput";
+import { HistoryChart } from "@/components/HistoryChart";
 import type { CurrencyCode } from "@/types";
 
 export function App() {
   const store = useCurrencyStore();
   const { rates, loading, error, lastUpdated } = useExchangeRates();
+
+  // Which input the user last edited (for bidirectional conversion)
+  const [editingIndex, setEditingIndex] = useState(0);
+  // The raw amount string from the last-edited input
+  const [baseAmount, setBaseAmount] = useState("1");
 
   // Compute display amounts for each currency input
   const displayAmounts = useMemo(() => {
@@ -18,23 +24,26 @@ export function App() {
       return store.currencies.map(() => "0");
     }
 
-    // Find the base currency (the one the user last edited)
-    const baseIndex = 0; // Default: first currency is base
-    const baseCurrency = store.currencies[baseIndex];
-    const baseAmount = baseCurrency.amount || 1;
+    const parsedBase = parseAmount(baseAmount);
+    if (isNaN(parsedBase) || parsedBase < 0) {
+      return store.currencies.map((_, i) => (i === editingIndex ? baseAmount : "0"));
+    }
 
-    return store.currencies.map((c, i) => {
-      if (i === baseIndex) {
-        return baseAmount.toString();
-      }
-      try {
-        const converted = convertViaUSD(baseAmount, baseCurrency.code, c.code, rates);
-        return formatCurrency(converted, c.code);
-      } catch {
-        return "0";
-      }
-    });
-  }, [rates, store.currencies]);
+    try {
+      const amounts = recalculateInputs(
+        editingIndex,
+        parsedBase,
+        store.currencies,
+        rates,
+      );
+      return amounts.map((amount, i) => {
+        if (i === editingIndex) return baseAmount;
+        return formatCurrency(amount, store.currencies[i].code);
+      });
+    } catch {
+      return store.currencies.map((_, i) => (i === editingIndex ? baseAmount : "0"));
+    }
+  }, [rates, store.currencies, editingIndex, baseAmount]);
 
   const handleSelectCurrency = useCallback(
     (code: CurrencyCode) => {
@@ -45,16 +54,24 @@ export function App() {
 
   const handleAmountChange = useCallback(
     (index: number, value: string) => {
-      store.setAmount(index, value);
+      setEditingIndex(index);
+      setBaseAmount(value);
     },
-    [store],
+    [],
   );
 
   const handleRemove = useCallback(
     (index: number) => {
       store.removeCurrency(index);
+      // If we removed the editing index, reset to 0
+      if (index === editingIndex) {
+        setEditingIndex(0);
+        setBaseAmount("1");
+      } else if (index < editingIndex) {
+        setEditingIndex((prev) => prev - 1);
+      }
     },
-    [store],
+    [store, editingIndex],
   );
 
   const handleChangeCurrency = useCallback(
@@ -63,6 +80,15 @@ export function App() {
     },
     [store],
   );
+
+  // Charts section: one chart per non-base currency (max 3)
+  const chartPairs = useMemo(() => {
+    if (store.currencies.length < 2) return [];
+    const base = store.currencies[0].code;
+    return store.currencies
+      .slice(1)
+      .map((c) => ({ base, target: c.code }));
+  }, [store.currencies]);
 
   return (
     <div className="min-h-screen bg-surface font-body antialiased">
@@ -105,55 +131,78 @@ export function App() {
         )}
 
         {(store.view === "single" || store.view === "multi") && (
-          <div className="space-y-3">
-            {store.currencies.map((currency, i) => (
-              <CurrencyInput
-                key={currency.code}
-                currency={currency}
-                index={i}
-                onAmountChange={handleAmountChange}
-                onRemove={handleRemove}
-                onChangeCurrency={handleChangeCurrency}
-                isBase={i === 0}
-                canRemove={store.currencies.length > 1}
-                displayAmount={displayAmounts[i] ?? "0"}
-                rates={rates}
-              />
-            ))}
+          <>
+            <div className="space-y-3">
+              {store.currencies.map((currency, i) => (
+                <CurrencyInput
+                  key={currency.code}
+                  currency={currency}
+                  index={i}
+                  onAmountChange={handleAmountChange}
+                  onRemove={handleRemove}
+                  onChangeCurrency={handleChangeCurrency}
+                  isBase={i === 0}
+                  canRemove={store.currencies.length > 1}
+                  displayAmount={displayAmounts[i] ?? "0"}
+                  rates={rates}
+                />
+              ))}
 
-            {/* Add currency button */}
-            {store.canAdd && (
-              <button
-                onClick={store.openSelector}
-                className="
-                  w-full py-3
-                  flex items-center justify-center gap-2
-                  border-2 border-dashed border-aero-200
-                  rounded-radius-lg
-                  font-display font-medium text-sm text-text-secondary
-                  transition-all duration-200
-                  hover:border-aero-400 hover:text-aero-500 hover:bg-aero-50/40
-                  active:scale-[0.98]
-                  cursor-pointer
-                "
-              >
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 16 16"
-                  fill="none"
+              {/* Add currency button */}
+              {store.canAdd && (
+                <button
+                  onClick={store.openSelector}
+                  className="
+                    w-full py-3
+                    flex items-center justify-center gap-2
+                    border-2 border-dashed border-aero-200
+                    rounded-radius-lg
+                    font-display font-medium text-sm text-text-secondary
+                    transition-all duration-200
+                    hover:border-aero-400 hover:text-aero-500 hover:bg-aero-50/40
+                    active:scale-[0.98]
+                    cursor-pointer
+                  "
                 >
-                  <path
-                    d="M8 3v10M3 8h10"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                  />
-                </svg>
-                Add currency
-              </button>
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                  >
+                    <path
+                      d="M8 3v10M3 8h10"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                  Add currency
+                </button>
+              )}
+            </div>
+
+            {/* Charts section — rendered when 2+ currencies */}
+            {chartPairs.length > 0 && (
+              <div className="mt-6 space-y-3">
+                <div
+                  className="
+                    h-px
+                    bg-gradient-to-r from-transparent via-aero-200 to-transparent
+                  "
+                />
+                <div className="space-y-3">
+                  {chartPairs.map(({ base, target }) => (
+                    <HistoryChart
+                      key={`${base}-${target}`}
+                      base={base}
+                      target={target}
+                    />
+                  ))}
+                </div>
+              </div>
             )}
-          </div>
+          </>
         )}
 
         {/* Currency Selector overlay */}
