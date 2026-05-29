@@ -1,15 +1,20 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-// Mock @vercel/kv before importing the handler
-vi.mock("@vercel/kv", () => ({
-  kv: {
+// Mock @upstash/redis before importing the handler
+vi.mock("@upstash/redis", () => {
+  const mockRedis = {
     get: vi.fn(),
     set: vi.fn(),
-  },
-}));
+  };
+  return {
+    Redis: {
+      fromEnv: vi.fn(() => mockRedis),
+    },
+  };
+});
 
-import { kv } from "@vercel/kv";
+import { redis } from "../_lib/kv";
 import handler from "../historical";
 
 function createMockReq(
@@ -43,8 +48,8 @@ const ORIGINAL_ENV = process.env;
 
 beforeEach(() => {
   process.env = { ...ORIGINAL_ENV, CURRENCY_API_KEY: "test-key" };
-  vi.mocked(kv.get).mockReset();
-  vi.mocked(kv.set).mockReset();
+  vi.mocked(redis.get).mockReset();
+  vi.mocked(redis.set).mockReset();
 });
 
 afterEach(() => {
@@ -54,7 +59,7 @@ afterEach(() => {
 describe("GET /api/historical", () => {
   it("returns cached rates for each date in range", async () => {
     // Mock KV to return data for both dates
-    vi.mocked(kv.get)
+    vi.mocked(redis.get)
       .mockResolvedValueOnce({ data: { EUR: 0.92, COP: 3901 } }) // history:2025-01-01
       .mockResolvedValueOnce({ data: { EUR: 0.93, COP: 3910 } }); // history:2025-01-02
 
@@ -75,7 +80,7 @@ describe("GET /api/historical", () => {
 
   it("fetches missing dates from the API", async () => {
     // First date cached, second date missing
-    vi.mocked(kv.get)
+    vi.mocked(redis.get)
       .mockResolvedValueOnce({ data: { EUR: 0.92 } }) // 2025-01-01 cached
       .mockResolvedValueOnce(null); // 2025-01-02 missing
 
@@ -114,7 +119,7 @@ describe("GET /api/historical", () => {
   });
 
   it("stores fetched rates in KV with 31-day TTL", async () => {
-    vi.mocked(kv.get).mockResolvedValue(null); // All missing
+    vi.mocked(redis.get).mockResolvedValue(null); // All missing
 
     vi.stubGlobal(
       "fetch",
@@ -139,7 +144,7 @@ describe("GET /api/historical", () => {
 
     await handler(req, res);
 
-    expect(kv.set).toHaveBeenCalledWith(
+    expect(redis.set).toHaveBeenCalledWith(
       "history:2025-01-01",
       expect.any(Object),
       { ex: 31 * 24 * 60 * 60 },
@@ -147,7 +152,7 @@ describe("GET /api/historical", () => {
   });
 
   it("gracefully handles individual API failures", async () => {
-    vi.mocked(kv.get).mockResolvedValue(null); // All missing
+    vi.mocked(redis.get).mockResolvedValue(null); // All missing
 
     // First call succeeds, second fails
     vi.stubGlobal(

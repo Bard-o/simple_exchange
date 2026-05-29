@@ -1,15 +1,20 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-// Mock @vercel/kv before importing the handler
-vi.mock("@vercel/kv", () => ({
-  kv: {
+// Mock @upstash/redis before importing the handler
+vi.mock("@upstash/redis", () => {
+  const mockRedis = {
     get: vi.fn(),
     set: vi.fn(),
-  },
-}));
+  };
+  return {
+    Redis: {
+      fromEnv: vi.fn(() => mockRedis),
+    },
+  };
+});
 
-import { kv } from "@vercel/kv";
+import { redis } from "../_lib/kv";
 
 // Import handler after mocks are set up
 import handler from "../latest";
@@ -52,8 +57,8 @@ const ORIGINAL_ENV = process.env;
 beforeEach(() => {
   vi.resetModules();
   process.env = { ...ORIGINAL_ENV, CURRENCY_API_KEY: "test-key" };
-  vi.mocked(kv.get).mockReset();
-  vi.mocked(kv.set).mockReset();
+  vi.mocked(redis.get).mockReset();
+  vi.mocked(redis.set).mockReset();
   vi.stubGlobal(
     "fetch",
     vi.fn(() =>
@@ -89,7 +94,7 @@ describe("GET /api/latest", () => {
       rates: { EUR: 0.91, COP: 3890 },
       timestamp: "2025-01-15T11:50:00Z",
     };
-    vi.mocked(kv.get).mockResolvedValueOnce({
+    vi.mocked(redis.get).mockResolvedValueOnce({
       data: cachedData,
       cachedAt: Date.now() - 5 * 60 * 1000, // 5 min ago (within 30 min soft TTL)
     });
@@ -110,7 +115,7 @@ describe("GET /api/latest", () => {
       rates: { EUR: 0.90 },
       timestamp: "2025-01-15T10:00:00Z",
     };
-    vi.mocked(kv.get).mockResolvedValueOnce({
+    vi.mocked(redis.get).mockResolvedValueOnce({
       data: staleData,
       cachedAt: Date.now() - 60 * 60 * 1000, // 1 hour ago (stale)
     });
@@ -128,18 +133,18 @@ describe("GET /api/latest", () => {
   });
 
   it("stores fetched data in KV and writes today's historical snapshot", async () => {
-    vi.mocked(kv.get).mockResolvedValueOnce(null); // No cache
+    vi.mocked(redis.get).mockResolvedValueOnce(null); // No cache
 
     const req = createMockReq("GET");
     const res = createMockRes();
 
     await handler(req, res);
 
-    // Should have called kv.set twice: once for latest, once for today's history
-    expect(kv.set).toHaveBeenCalledTimes(2);
+    // Should have called redis.set twice: once for latest, once for today's history
+    expect(redis.set).toHaveBeenCalledTimes(2);
 
     // First call: rates:latest
-    const latestCall = vi.mocked(kv.set).mock.calls[0] as [string, any, any];
+    const latestCall = vi.mocked(redis.set).mock.calls[0] as [string, any, any];
     const latestEntry = latestCall[1];
     expect(latestCall[0]).toBe("rates:latest");
     expect(latestEntry.data.base).toBe("USD");
@@ -150,7 +155,7 @@ describe("GET /api/latest", () => {
     });
 
     // Second call: history:YYYY-MM-DD (today)
-    const [historyKey] = vi.mocked(kv.set).mock.calls[1];
+    const [historyKey] = vi.mocked(redis.set).mock.calls[1];
     expect(historyKey).toMatch(/^history:\d{4}-\d{2}-\d{2}$/);
   });
 
@@ -160,7 +165,7 @@ describe("GET /api/latest", () => {
       rates: { EUR: 0.90 },
       timestamp: "2025-01-15T10:00:00Z",
     };
-    vi.mocked(kv.get).mockResolvedValueOnce({
+    vi.mocked(redis.get).mockResolvedValueOnce({
       data: staleData,
       cachedAt: Date.now() - 60 * 60 * 1000, // 1 hour ago
     });
@@ -180,7 +185,7 @@ describe("GET /api/latest", () => {
   });
 
   it("returns 502 when API fails and no cache exists", async () => {
-    vi.mocked(kv.get).mockResolvedValueOnce(null);
+    vi.mocked(redis.get).mockResolvedValueOnce(null);
     vi.stubGlobal(
       "fetch",
       vi.fn(() => Promise.reject(new Error("API down"))),

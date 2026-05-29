@@ -1,4 +1,6 @@
-import { kv } from "@vercel/kv";
+import { Redis } from "@upstash/redis";
+
+export const redis = Redis.fromEnv();
 
 /** KV cache wrapper with metadata for stale-while-revalidate support. */
 interface CachedEntry<T> {
@@ -8,7 +10,7 @@ interface CachedEntry<T> {
 
 /** Get cached data from KV. Returns null if missing. */
 export async function getCached<T>(key: string): Promise<T | null> {
-  const entry = await kv.get<CachedEntry<T>>(key);
+  const entry = await redis.get<CachedEntry<T>>(key);
   return entry?.data ?? null;
 }
 
@@ -16,7 +18,7 @@ export async function getCached<T>(key: string): Promise<T | null> {
 export async function getCachedEntry<T>(
   key: string,
 ): Promise<CachedEntry<T> | null> {
-  return kv.get<CachedEntry<T>>(key);
+  return redis.get<CachedEntry<T>>(key);
 }
 
 /** Store data in KV with a hard TTL (seconds). */
@@ -29,7 +31,7 @@ export async function setCached<T>(
     data,
     cachedAt: Date.now(),
   };
-  await kv.set(key, entry, { ex: ttlSeconds });
+  await redis.set(key, entry, { ex: ttlSeconds });
 }
 
 /** Check if a cached entry is fresh (within soft TTL in ms). */

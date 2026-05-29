@@ -1,15 +1,20 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-// Mock @vercel/kv before importing the handler
-vi.mock("@vercel/kv", () => ({
-  kv: {
+// Mock @upstash/redis before importing the handler
+vi.mock("@upstash/redis", () => {
+  const mockRedis = {
     get: vi.fn(),
     set: vi.fn(),
-  },
-}));
+  };
+  return {
+    Redis: {
+      fromEnv: vi.fn(() => mockRedis),
+    },
+  };
+});
 
-import { kv } from "@vercel/kv";
+import { redis } from "../_lib/kv";
 import handler from "../backfill";
 
 function createMockReq(method: string = "POST", body?: unknown) {
@@ -40,8 +45,8 @@ const ORIGINAL_ENV = process.env;
 
 beforeEach(() => {
   process.env = { ...ORIGINAL_ENV, CURRENCY_API_KEY: "test-key" };
-  vi.mocked(kv.get).mockReset();
-  vi.mocked(kv.set).mockReset();
+  vi.mocked(redis.get).mockReset();
+  vi.mocked(redis.set).mockReset();
   // Stub fetch as a spy so we can assert it wasn't called
   vi.stubGlobal("fetch", vi.fn());
 });
@@ -53,7 +58,7 @@ afterEach(() => {
 describe("POST /api/backfill", () => {
   it("skips dates already in KV cache", async () => {
     // All dates cached
-    vi.mocked(kv.get).mockResolvedValue({ data: { EUR: 0.92 } });
+    vi.mocked(redis.get).mockResolvedValue({ data: { EUR: 0.92 } });
 
     const req = createMockReq("POST", { days: 5 });
     const res = createMockRes();
@@ -70,7 +75,7 @@ describe("POST /api/backfill", () => {
 
   it("backfills missing dates sequentially", async () => {
     // All dates missing
-    vi.mocked(kv.get).mockResolvedValue(null);
+    vi.mocked(redis.get).mockResolvedValue(null);
 
     let fetchCount = 0;
     vi.stubGlobal(
@@ -106,7 +111,7 @@ describe("POST /api/backfill", () => {
   });
 
   it("collects errors from failed API calls", async () => {
-    vi.mocked(kv.get).mockResolvedValue(null);
+    vi.mocked(redis.get).mockResolvedValue(null);
 
     vi.stubGlobal(
       "fetch",
@@ -132,7 +137,7 @@ describe("POST /api/backfill", () => {
 
   it("handles mix of cached and missing dates", async () => {
     let callCount = 0;
-    vi.mocked(kv.get).mockImplementation(() => {
+    vi.mocked(redis.get).mockImplementation(() => {
       callCount++;
       // First date cached, rest missing
       if (callCount === 1) {
