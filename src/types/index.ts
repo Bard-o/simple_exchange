@@ -90,6 +90,16 @@ export interface ApiError {
   retryAfter?: number;
 }
 
+/** Response from /api/historical with date range. */
+export type HistoricalRangeResponse = Record<string, Partial<ExchangeRates>>;
+
+/** Response from /api/backfill. */
+export interface BackfillResponse {
+  backfilled: number;
+  skipped: number;
+  errors: string[];
+}
+
 /** Currency info for the selector list. */
 export interface CurrencyInfo {
   code: CurrencyCode;
