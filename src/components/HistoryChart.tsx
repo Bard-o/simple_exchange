@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
 import {
   ResponsiveContainer,
   LineChart,
@@ -8,13 +8,15 @@ import {
   CartesianGrid,
   Tooltip,
 } from "recharts";
-import { useHistoricalRates } from "@/hooks/useHistoricalRates";
-import { PeriodSelector } from "@/components/PeriodSelector";
-import type { CurrencyCode } from "@/types";
+import type { CurrencyCode, HistoricalRate } from "@/types";
 
 interface HistoryChartProps {
   base: CurrencyCode;
   target: CurrencyCode;
+  /** Pre-fetched data for this target — passed from parent, not fetched here. */
+  data: HistoricalRate[];
+  loading: boolean;
+  error: string | null;
 }
 
 /** Format a YYYY-MM-DD date string as short month+day (e.g. "May 29"). */
@@ -49,7 +51,6 @@ function ChartTooltip({
         shadow-glass
       "
       style={{
-        /* Beveled inner highlight — 2000s desktop software feel */
         boxShadow: `
           inset 0 1px 0 oklch(1 0 0 / 0.4),
           inset 0 -1px 0 oklch(0 0 0 / 0.08),
@@ -70,10 +71,13 @@ function ChartTooltip({
   );
 }
 
-export function HistoryChart({ base, target }: HistoryChartProps) {
-  const [period, setPeriod] = useState<7 | 30>(7);
-  const { data, loading, error } = useHistoricalRates(base, target, period);
-
+export function HistoryChart({
+  base,
+  target,
+  data,
+  loading,
+  error,
+}: HistoryChartProps) {
   const chartData = useMemo(
     () =>
       data.map((point) => ({
@@ -104,15 +108,14 @@ export function HistoryChart({ base, target }: HistoryChartProps) {
         animate-slide-up
       "
     >
-      {/* Header row: title + period toggle */}
+      {/* Header: pair label only — period selector lives at App level */}
       <div className="flex items-center justify-between mb-3">
         <h3 className="font-display font-semibold text-sm text-text-primary">
           {target} to {base}
         </h3>
-        <PeriodSelector period={period} onChange={setPeriod} />
       </div>
 
-      {/* Chart area */}
+      {/* Loading skeleton */}
       {loading && (
         <div className="h-[200px] flex items-center justify-center">
           <div
@@ -126,6 +129,7 @@ export function HistoryChart({ base, target }: HistoryChartProps) {
         </div>
       )}
 
+      {/* Error */}
       {error && !loading && (
         <div className="h-[200px] flex items-center justify-center">
           <p className="font-body text-sm text-error">
@@ -134,6 +138,7 @@ export function HistoryChart({ base, target }: HistoryChartProps) {
         </div>
       )}
 
+      {/* Empty */}
       {!loading && !error && chartData.length === 0 && (
         <div className="h-[200px] flex items-center justify-center">
           <p className="font-body text-sm text-text-muted">
@@ -142,9 +147,13 @@ export function HistoryChart({ base, target }: HistoryChartProps) {
         </div>
       )}
 
+      {/* Chart */}
       {!loading && !error && chartData.length > 0 && (
         <ResponsiveContainer width="100%" height={200}>
-          <LineChart data={chartData} margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
+          <LineChart
+            data={chartData}
+            margin={{ top: 4, right: 8, bottom: 4, left: 0 }}
+          >
             <CartesianGrid
               strokeDasharray="3 3"
               stroke="oklch(0.88 0.01 30)"

@@ -1,12 +1,14 @@
 import { useCallback, useMemo, useState } from "react";
 import { useCurrencyStore } from "@/hooks/useCurrencyStore";
 import { useExchangeRates } from "@/hooks/useExchangeRates";
+import { useHistoricalData } from "@/hooks/useHistoricalData";
 import { recalculateInputs } from "@/utils/conversion";
 import { formatCurrency, parseAmount } from "@/utils/formatters";
 import { EmptyState } from "@/components/EmptyState";
 import { CurrencySelector } from "@/components/CurrencySelector";
 import { CurrencyInput } from "@/components/CurrencyInput";
 import { HistoryChart } from "@/components/HistoryChart";
+import { PeriodSelector } from "@/components/PeriodSelector";
 import type { CurrencyCode } from "@/types";
 
 export function App() {
@@ -18,6 +20,12 @@ export function App() {
   // The raw amount string from the last-edited input
   const [baseAmount, setBaseAmount] = useState("1");
 
+  // Shared chart period — lifted here so all charts reflect the same range
+  const [chartPeriod, setChartPeriod] = useState<7 | 30>(7);
+
+  // Single historical fetch for ALL targets — one API call, not N
+  const historical = useHistoricalData(chartPeriod);
+
   // Compute display amounts for each currency input
   const displayAmounts = useMemo(() => {
     if (!rates || store.currencies.length === 0) {
@@ -26,7 +34,9 @@ export function App() {
 
     const parsedBase = parseAmount(baseAmount);
     if (isNaN(parsedBase) || parsedBase < 0) {
-      return store.currencies.map((_, i) => (i === editingIndex ? baseAmount : "0"));
+      return store.currencies.map((_, i) =>
+        i === editingIndex ? baseAmount : "0",
+      );
     }
 
     try {
@@ -41,7 +51,9 @@ export function App() {
         return formatCurrency(amount, store.currencies[i].code);
       });
     } catch {
-      return store.currencies.map((_, i) => (i === editingIndex ? baseAmount : "0"));
+      return store.currencies.map((_, i) =>
+        i === editingIndex ? baseAmount : "0",
+      );
     }
   }, [rates, store.currencies, editingIndex, baseAmount]);
 
@@ -81,13 +93,11 @@ export function App() {
     [store],
   );
 
-  // Charts section: one chart per non-base currency (max 3)
+  // Charts: one per non-base currency (max 3)
   const chartPairs = useMemo(() => {
     if (store.currencies.length < 2) return [];
     const base = store.currencies[0].code;
-    return store.currencies
-      .slice(1)
-      .map((c) => ({ base, target: c.code }));
+    return store.currencies.slice(1).map((c) => ({ base, target: c.code }));
   }, [store.currencies]);
 
   return (
@@ -185,18 +195,23 @@ export function App() {
             {/* Charts section — rendered when 2+ currencies */}
             {chartPairs.length > 0 && (
               <div className="mt-6 space-y-3">
-                <div
-                  className="
-                    h-px
-                    bg-gradient-to-r from-transparent via-aero-200 to-transparent
-                  "
+                <div className="h-px bg-gradient-to-r from-transparent via-aero-200 to-transparent" />
+
+                {/* Single period selector controls ALL charts */}
+                <PeriodSelector
+                  period={chartPeriod}
+                  onChange={setChartPeriod}
                 />
+
                 <div className="space-y-3">
                   {chartPairs.map(({ base, target }) => (
                     <HistoryChart
                       key={`${base}-${target}`}
                       base={base}
                       target={target}
+                      data={historical.dataByTarget[target] ?? []}
+                      loading={historical.loading}
+                      error={historical.error}
                     />
                   ))}
                 </div>
