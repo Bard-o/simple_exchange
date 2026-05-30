@@ -8,9 +8,7 @@ vi.mock("@upstash/redis", () => {
     set: vi.fn(),
   };
   return {
-    Redis: {
-      fromEnv: vi.fn(() => mockRedis),
-    },
+    Redis: vi.fn(() => mockRedis),
   };
 });
 
