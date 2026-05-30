@@ -1,11 +1,11 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { withCors, handleOptions } from "./_lib/cors";
+import { withCors, handleOptions } from "./_lib/cors.js";
 import {
   getCachedEntry,
   setCached,
   isFresh,
-} from "./_lib/kv";
-import { fetchLatestFromApi } from "./_lib/currency-api";
+} from "./_lib/kv.js";
+import { fetchLatestFromApi } from "./_lib/currency-api.js";
 
 const KV_KEY_LATEST = "rates:latest";
 const KV_KEY_HISTORY_PREFIX = "history:";

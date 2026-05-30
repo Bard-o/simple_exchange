@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { withCors, handleOptions } from "./_lib/cors";
-import { getCached, setCached } from "./_lib/kv";
-import { fetchHistoricalFromApi } from "./_lib/currency-api";
+import { withCors, handleOptions } from "./_lib/cors.js";
+import { getCached, setCached } from "./_lib/kv.js";
+import { fetchHistoricalFromApi } from "./_lib/currency-api.js";
 
 const KV_KEY_PREFIX = "history:";
 const HARD_TTL_S = 31 * 24 * 60 * 60; // 31 days
