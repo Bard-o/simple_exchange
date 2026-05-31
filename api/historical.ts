@@ -151,5 +151,6 @@ export default async function handler(
   console.log("[historical] Final result keys:", Object.keys(result));
   const cacheStatus = missingDates.length === 0 ? "HIT" : "MISS";
   res.setHeader("X-Cache", cacheStatus);
+  console.log("[historical] Result sample:", JSON.stringify(result).slice(0, 300));
   res.status(200).json(result);
 }
