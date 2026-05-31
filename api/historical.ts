@@ -151,6 +151,18 @@ export default async function handler(
   console.log("[historical] Final result keys:", Object.keys(result));
   const cacheStatus = missingDates.length === 0 ? "HIT" : "MISS";
   res.setHeader("X-Cache", cacheStatus);
-  console.log("[historical] Result sample:", JSON.stringify(result).slice(0, 300));
-  res.status(200).json(result);
+
+  // Normalize: handle legacy nested format { date, rates } stored in cache
+  // by converting to flat { USD: 1, EUR: 0.85 } for consistency
+  const normalizedResult: Record<string, Record<string, number>> = {};
+  for (const [date, value] of Object.entries(result)) {
+    if (value && typeof value === "object" && "rates" in value) {
+      // Legacy nested format — unwrap it
+      normalizedResult[date] = (value as { date: string; rates: Record<string, number> }).rates;
+    } else {
+      normalizedResult[date] = value as Record<string, number>;
+    }
+  }
+
+  res.status(200).json(normalizedResult);
 }
