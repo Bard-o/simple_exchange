@@ -158,7 +158,7 @@ export default async function handler(
   for (const [date, value] of Object.entries(result)) {
     if (value && typeof value === "object" && "rates" in value) {
       // Legacy nested format — unwrap it
-      normalizedResult[date] = (value as { date: string; rates: Record<string, number> }).rates;
+      normalizedResult[date] = (value as unknown as { date: string; rates: Record<string, number> }).rates;
     } else {
       normalizedResult[date] = value as Record<string, number>;
     }
