@@ -128,7 +128,7 @@ export default async function handler(
         const rates = await fetchHistoricalFromApi(apiKey, date);
         await setCached(
           `${KV_KEY_PREFIX}${date}`,
-          { date, rates },
+          rates,
           HARD_TTL_S,
         );
         result[date] = rates;
