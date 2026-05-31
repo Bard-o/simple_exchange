@@ -59,7 +59,13 @@ export function useHistoricalData(
         startDate,
         endDate,
       );
+      console.log("[useHistoricalData] Raw response sample:", JSON.stringify(response[Object.keys(response)[0]]));
+      console.log("[useHistoricalData] All currencies in first date:", Object.keys(response[Object.keys(response)[0]] || {}));
 
+      console.log("[useHistoricalData] Response dates:", Object.keys(response));
+      const firstDate = Object.keys(response)[0];
+      console.log("[useHistoricalData] First date data:", JSON.stringify(response[firstDate]));
+      
       // Pivot: { "2026-05-29": { COP: 3901, EUR: 0.92 } }
       //    → { COP: [{ date: "2026-05-29", rate: 3901 }], EUR: [...] }
       const byTarget: Record<string, HistoricalRate[]> = {};
@@ -67,15 +73,21 @@ export function useHistoricalData(
         .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))
         .sort();
 
+      console.log("[useHistoricalData] Sorted valid dates:", sortedDates);
+      
       for (const date of sortedDates) {
         const rates = response[date];
         if (!rates) continue;
+        console.log("[useHistoricalData] Processing date:", date, "rates:", JSON.stringify(rates).slice(0, 200));
         for (const [currency, rate] of Object.entries(rates)) {
           if (rate == null || rate <= 0) continue;
           if (!byTarget[currency]) byTarget[currency] = [];
           byTarget[currency].push({ date, rate });
         }
       }
+      
+      console.log("[useHistoricalData] Final byTarget keys:", Object.keys(byTarget));
+      console.log("[useHistoricalData] Sample EUR data:", JSON.stringify(byTarget["EUR"]));
 
       setCached(cacheKey, byTarget);
       setDataByTarget(byTarget);
