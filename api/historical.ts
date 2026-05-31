@@ -110,29 +110,36 @@ export default async function handler(
   const result: Record<string, Record<string, number>> = {};
   const missingDates: string[] = [];
 
+  console.log("[historical] dates requested:", dates.length);
   for (const date of dates) {
     const cached = await getCached<Record<string, number>>(
       `${KV_KEY_PREFIX}${date}`,
     );
     if (cached) {
+      console.log("[historical] cache HIT for", date);
       result[date] = cached;
     } else {
+      console.log("[historical] cache MISS for", date);
       missingDates.push(date);
     }
   }
 
   // Fetch missing dates from the API with concurrency limit
   if (missingDates.length > 0) {
+    console.log("[historical] Fetching", missingDates.length, "missing dates from API");
     const tasks = missingDates.map((date) => async () => {
       try {
+        console.log("[historical] Fetching date:", date);
         const rates = await fetchHistoricalFromApi(apiKey, date);
+        console.log("[historical] API result for", date, ":", Object.keys(rates).slice(0, 5), "...");
         await setCached(
           `${KV_KEY_PREFIX}${date}`,
           rates,
           HARD_TTL_S,
         );
         result[date] = rates;
-      } catch {
+      } catch (err) {
+        console.error("[historical] Failed to fetch", date, ":", err);
         // Individual date failure — leave it out of the response
         // The client will see gaps in the date range
       }
@@ -141,6 +148,7 @@ export default async function handler(
     await parallelLimit(tasks, MAX_CONCURRENT);
   }
 
+  console.log("[historical] Final result keys:", Object.keys(result));
   const cacheStatus = missingDates.length === 0 ? "HIT" : "MISS";
   res.setHeader("X-Cache", cacheStatus);
   res.status(200).json(result);

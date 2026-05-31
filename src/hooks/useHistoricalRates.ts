@@ -54,22 +54,28 @@ export function useHistoricalRates(
 
     try {
       const [startDate, endDate] = getDateRange(days);
+      console.log("[useHistoricalRates] Requesting:", { base, target, startDate, endDate });
       const response = await fetchHistoricalRates(
         base,
         target,
         startDate,
         endDate,
       );
+      console.log("[useHistoricalRates] Raw response keys:", Object.keys(response));
+      console.log("[useHistoricalRates] Sample entry:", Object.entries(response)[0]);
 
       // Transform response into HistoricalRate[]
       const points: HistoricalRate[] = Object.entries(response)
         .filter(([date]) => /^\d{4}-\d{2}-\d{2}$/.test(date))
         .map(([date, rates]) => {
           const rate = rates[target];
+          console.log("[useHistoricalRates] date:", date, "rates type:", typeof rates, "target:", target, "rate:", rate);
           return { date, rate: rate ?? 0 };
         })
         .filter((p) => p.rate > 0)
         .sort((a, b) => a.date.localeCompare(b.date));
+
+      console.log("[useHistoricalRates] Parsed points:", points);
 
       // Cache each individual date as well for cross-pair reuse
       for (const point of points) {
